@@ -91,3 +91,6 @@ npm run build
 - Enable realtime on tables in dashboard
 - Check subscription filters
 - Verify network connectivity
+### Session Management Issues
+If a teacher account cannot start or control a session because of row level security, run the SQL script `allow-all-teachers-manage-sessions.sql` in the Supabase SQL Editor.
+This policy lets any user with role `teacher` manage all sessions. Remember to revert the policy before production.
