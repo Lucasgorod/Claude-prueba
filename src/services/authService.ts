@@ -93,15 +93,9 @@ class AuthService {
       if (error) throw error;
       if (!data.user) throw new Error('No user returned from sign up');
 
-      // Store student profile in database
-      await this.createUserProfile(data.user.id, {
-        id: data.user.id,
-        email: tempEmail,
-        display_name: studentName,
-        role: 'student',
-        created_at: new Date().toISOString(),
-        last_login_at: new Date().toISOString(),
-      });
+      // Profile row is automatically created via trigger on auth.users.
+      // Just update the last login timestamp.
+      await this.updateLastLogin(data.user.id);
 
       return data.user;
     } catch (error: any) {
