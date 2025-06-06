@@ -449,7 +449,16 @@ export const QuizTaking: React.FC = () => {
     const { isCorrect, points } = calculateScore();
     
     try {
-      console.log('Submitting response...', { answer, timeSpent, isCorrect, points });
+      console.log('Submitting response...', { 
+        sessionId,
+        participantId, 
+        questionId: currentQuestion.id,
+        answer, 
+        timeSpent, 
+        isCorrect, 
+        points 
+      });
+      
       await submitResponse(
         sessionId,
         participantId,
@@ -459,9 +468,11 @@ export const QuizTaking: React.FC = () => {
         isCorrect,
         points
       );
+      
       console.log('Response submitted successfully!');
     } catch (error) {
       console.error('Error submitting answer:', error);
+      alert(`Error: ${error instanceof Error ? error.message : 'Failed to submit answer'}`);
       setHasAnswered(false); // Reset on error so user can try again
     }
   }, [hasAnswered, currentQuestion, participantId, sessionId, startTime, submitResponse]);

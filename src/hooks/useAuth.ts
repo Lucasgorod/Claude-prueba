@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { User } from 'firebase/auth';
+import { User } from '@supabase/supabase-js';
 import { authService, UserProfile } from '../services/authService';
 
 interface AuthState {
@@ -21,7 +21,7 @@ export const useAuth = () => {
     const unsubscribe = authService.onAuthStateChange(async (user) => {
       if (user) {
         try {
-          const profile = await authService.getUserProfile(user.uid);
+          const profile = await authService.getUserProfile(user.id);
           setAuthState({
             user,
             profile,

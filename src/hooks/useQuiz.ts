@@ -31,7 +31,7 @@ export const useQuiz = () => {
     
     try {
       setQuizState(prev => ({ ...prev, loading: true, error: null }));
-      const quizzes = await quizService.getUserQuizzes(user.uid);
+      const quizzes = await quizService.getUserQuizzes(user.id);
       setQuizState({ quizzes, loading: false, error: null });
     } catch (error: any) {
       console.error('Error loading quizzes:', error);
@@ -57,7 +57,7 @@ export const useQuiz = () => {
 
       const quizId = await quizService.createQuiz({
         ...quizData,
-        createdBy: user.uid,
+        createdBy: user.id,
       });
       
       // Reload quizzes after creation
@@ -120,7 +120,7 @@ export const useQuiz = () => {
     try {
       setQuizState(prev => ({ ...prev, loading: true, error: null }));
       
-      const newQuizId = await quizService.duplicateQuiz(quizId, newTitle, user.uid);
+      const newQuizId = await quizService.duplicateQuiz(quizId, newTitle, user.id);
       
       // Reload quizzes after duplication
       await loadUserQuizzes();

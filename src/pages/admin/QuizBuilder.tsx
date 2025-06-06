@@ -396,7 +396,7 @@ export const QuizBuilder: React.FC = () => {
         title: quizTitle.trim(),
         description: quizDescription.trim(),
         questions,
-        createdBy: user.uid,
+        createdBy: user.id,
       };
 
       if (currentQuiz) {

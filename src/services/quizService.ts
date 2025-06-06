@@ -1,51 +1,61 @@
-import { 
-  collection, 
-  doc, 
-  addDoc, 
-  updateDoc, 
-  deleteDoc, 
-  getDocs, 
-  getDoc,
-  query,
-  where,
-  orderBy,
-  onSnapshot,
-  serverTimestamp,
-  Timestamp
-} from 'firebase/firestore';
-import { db } from './firebase';
+import { supabase } from './supabase';
 import { Quiz, Question } from '../types';
 
-export interface FirebaseQuiz extends Omit<Quiz, 'createdAt' | 'updatedAt'> {
-  createdAt: Timestamp;
-  updatedAt: Timestamp;
+export interface DatabaseQuiz extends Omit<Quiz, 'createdAt' | 'updatedAt'> {
+  created_at: string;
+  updated_at: string;
+  created_by: string;
 }
 
 class QuizService {
-  private readonly collection = 'quizzes';
+  private readonly table = 'quizzes';
 
-  // Convert Firebase timestamp to Date
-  private convertFirebaseQuiz(firebaseQuiz: any): Quiz {
+  // Convert database quiz to application format
+  private convertDatabaseQuiz(dbQuiz: any): Quiz {
     return {
-      ...firebaseQuiz,
-      createdAt: firebaseQuiz.createdAt?.toDate() || new Date(),
-      updatedAt: firebaseQuiz.updatedAt?.toDate() || new Date(),
+      ...dbQuiz,
+      createdAt: new Date(dbQuiz.created_at),
+      updatedAt: new Date(dbQuiz.updated_at),
+      createdBy: dbQuiz.created_by,
     };
   }
 
   // Create a new quiz
   async createQuiz(quiz: Omit<Quiz, 'id' | 'createdAt' | 'updatedAt'>): Promise<string> {
     try {
+      console.log('Creating quiz with data:', quiz);
+      
+      const now = new Date().toISOString();
       const quizData = {
-        ...quiz,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
+        title: quiz.title,
+        description: quiz.description,
+        questions: quiz.questions,
+        created_by: quiz.createdBy,
+        created_at: now,
+        updated_at: now,
       };
 
-      const docRef = await addDoc(collection(db, this.collection), quizData);
-      return docRef.id;
+      console.log('Formatted quiz data:', quizData);
+
+      const { data, error } = await supabase
+        .from(this.table)
+        .insert([quizData])
+        .select('id')
+        .single();
+
+      console.log('Supabase response:', { data, error });
+
+      if (error) {
+        console.error('Supabase error details:', error);
+        throw error;
+      }
+      
+      return data.id;
     } catch (error) {
       console.error('Error creating quiz:', error);
+      if (error instanceof Error) {
+        throw new Error(`Failed to create quiz: ${error.message}`);
+      }
       throw new Error('Failed to create quiz');
     }
   }
@@ -53,11 +63,21 @@ class QuizService {
   // Update an existing quiz
   async updateQuiz(quizId: string, updates: Partial<Omit<Quiz, 'id' | 'createdAt' | 'updatedAt'>>): Promise<void> {
     try {
-      const quizRef = doc(db, this.collection, quizId);
-      await updateDoc(quizRef, {
-        ...updates,
-        updatedAt: serverTimestamp(),
-      });
+      const updateData: any = {
+        updated_at: new Date().toISOString(),
+      };
+
+      if (updates.title) updateData.title = updates.title;
+      if (updates.description) updateData.description = updates.description;
+      if (updates.questions) updateData.questions = updates.questions;
+      if (updates.createdBy) updateData.created_by = updates.createdBy;
+
+      const { error } = await supabase
+        .from(this.table)
+        .update(updateData)
+        .eq('id', quizId);
+
+      if (error) throw error;
     } catch (error) {
       console.error('Error updating quiz:', error);
       throw new Error('Failed to update quiz');
@@ -67,8 +87,12 @@ class QuizService {
   // Delete a quiz
   async deleteQuiz(quizId: string): Promise<void> {
     try {
-      const quizRef = doc(db, this.collection, quizId);
-      await deleteDoc(quizRef);
+      const { error } = await supabase
+        .from(this.table)
+        .delete()
+        .eq('id', quizId);
+
+      if (error) throw error;
     } catch (error) {
       console.error('Error deleting quiz:', error);
       throw new Error('Failed to delete quiz');
@@ -78,14 +102,18 @@ class QuizService {
   // Get a specific quiz by ID
   async getQuiz(quizId: string): Promise<Quiz | null> {
     try {
-      const quizRef = doc(db, this.collection, quizId);
-      const quizSnap = await getDoc(quizRef);
-      
-      if (quizSnap.exists()) {
-        return this.convertFirebaseQuiz({ id: quizSnap.id, ...quizSnap.data() });
+      const { data, error } = await supabase
+        .from(this.table)
+        .select('*')
+        .eq('id', quizId)
+        .single();
+
+      if (error) {
+        if (error.code === 'PGRST116') return null; // Row not found
+        throw error;
       }
-      
-      return null;
+
+      return this.convertDatabaseQuiz(data);
     } catch (error) {
       console.error('Error getting quiz:', error);
       throw new Error('Failed to get quiz');
@@ -95,16 +123,15 @@ class QuizService {
   // Get all quizzes for a specific user
   async getUserQuizzes(userId: string): Promise<Quiz[]> {
     try {
-      const q = query(
-        collection(db, this.collection),
-        where('createdBy', '==', userId),
-        orderBy('updatedAt', 'desc')
-      );
-      
-      const querySnapshot = await getDocs(q);
-      return querySnapshot.docs.map(doc => 
-        this.convertFirebaseQuiz({ id: doc.id, ...doc.data() })
-      );
+      const { data, error } = await supabase
+        .from(this.table)
+        .select('*')
+        .eq('created_by', userId)
+        .order('updated_at', { ascending: false });
+
+      if (error) throw error;
+
+      return data.map(quiz => this.convertDatabaseQuiz(quiz));
     } catch (error) {
       console.error('Error getting user quizzes:', error);
       throw new Error('Failed to get quizzes');
@@ -114,15 +141,14 @@ class QuizService {
   // Get all quizzes (for admin/public access)
   async getAllQuizzes(): Promise<Quiz[]> {
     try {
-      const q = query(
-        collection(db, this.collection),
-        orderBy('updatedAt', 'desc')
-      );
-      
-      const querySnapshot = await getDocs(q);
-      return querySnapshot.docs.map(doc => 
-        this.convertFirebaseQuiz({ id: doc.id, ...doc.data() })
-      );
+      const { data, error } = await supabase
+        .from(this.table)
+        .select('*')
+        .order('updated_at', { ascending: false });
+
+      if (error) throw error;
+
+      return data.map(quiz => this.convertDatabaseQuiz(quiz));
     } catch (error) {
       console.error('Error getting all quizzes:', error);
       throw new Error('Failed to get quizzes');
@@ -131,37 +157,55 @@ class QuizService {
 
   // Subscribe to real-time updates for user's quizzes
   subscribeToUserQuizzes(userId: string, callback: (quizzes: Quiz[]) => void): () => void {
-    const q = query(
-      collection(db, this.collection),
-      where('createdBy', '==', userId),
-      orderBy('updatedAt', 'desc')
-    );
+    const channel = supabase
+      .channel('user-quizzes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: this.table,
+          filter: `created_by=eq.${userId}`
+        },
+        () => {
+          // Fetch updated data when changes occur
+          this.getUserQuizzes(userId).then(callback).catch(console.error);
+        }
+      )
+      .subscribe();
 
-    return onSnapshot(q, (querySnapshot) => {
-      const quizzes = querySnapshot.docs.map(doc => 
-        this.convertFirebaseQuiz({ id: doc.id, ...doc.data() })
-      );
-      callback(quizzes);
-    }, (error) => {
-      console.error('Error in quiz subscription:', error);
-    });
+    // Initial fetch
+    this.getUserQuizzes(userId).then(callback).catch(console.error);
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }
 
   // Subscribe to real-time updates for all quizzes
   subscribeToAllQuizzes(callback: (quizzes: Quiz[]) => void): () => void {
-    const q = query(
-      collection(db, this.collection),
-      orderBy('updatedAt', 'desc')
-    );
+    const channel = supabase
+      .channel('all-quizzes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: this.table
+        },
+        () => {
+          // Fetch updated data when changes occur
+          this.getAllQuizzes().then(callback).catch(console.error);
+        }
+      )
+      .subscribe();
 
-    return onSnapshot(q, (querySnapshot) => {
-      const quizzes = querySnapshot.docs.map(doc => 
-        this.convertFirebaseQuiz({ id: doc.id, ...doc.data() })
-      );
-      callback(quizzes);
-    }, (error) => {
-      console.error('Error in quiz subscription:', error);
-    });
+    // Initial fetch
+    this.getAllQuizzes().then(callback).catch(console.error);
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }
 
   // Duplicate a quiz (for creating templates or copies)
@@ -173,8 +217,8 @@ class QuizService {
       }
 
       const duplicatedQuiz = {
-        ...originalQuiz,
         title: newTitle,
+        description: originalQuiz.description,
         createdBy: userId,
         // Generate new IDs for all questions
         questions: originalQuiz.questions.map(question => ({
@@ -182,11 +226,6 @@ class QuizService {
           id: this.generateQuestionId(),
         })),
       };
-
-      // Remove the original ID and timestamps
-      delete (duplicatedQuiz as any).id;
-      delete (duplicatedQuiz as any).createdAt;
-      delete (duplicatedQuiz as any).updatedAt;
 
       return await this.createQuiz(duplicatedQuiz);
     } catch (error) {

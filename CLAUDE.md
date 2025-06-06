@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is an Apple-style quiz application built with React, TypeScript, Styled Components, and Firebase. The app features a dark mode aesthetic with glassmorphism effects and smooth animations.
+This is an Apple-style quiz application built with React, TypeScript, Styled Components, and Supabase. The app features a dark mode aesthetic with glassmorphism effects and smooth animations.
 
 ## Development Commands
 
@@ -21,10 +21,7 @@ npm run build
 # Lint code
 npm run lint
 
-# Start Firebase emulators
-npm run firebase:emulators
-
-# Deploy to Firebase
+# Deploy
 npm run deploy
 ```
 
@@ -33,7 +30,7 @@ npm run deploy
 - **React + TypeScript**: Main framework with strict typing
 - **Styled Components**: CSS-in-JS with theme system
 - **Framer Motion**: Smooth animations and transitions
-- **Firebase**: Backend services (Firestore, Auth, Functions, Hosting)
+- **Supabase**: Backend services (PostgreSQL Database, Auth, Realtime, Hosting)
 - **React Router v6**: Client-side routing
 
 ## Key Design Principles
@@ -51,8 +48,9 @@ npm run deploy
 - **Pages** (`src/pages/`): Feature-specific page components
 - **Styles** (`src/styles/`): Theme, global styles, and animations
 
-## Firebase Configuration
+## Supabase Configuration
 
-- Update `src/services/firebase.ts` with your Firebase config
-- Firestore rules configured for quiz sessions and anonymous participants
-- Emulators configured for local development
+- Update `.env` with your Supabase URL and anon key
+- Database tables for users, quizzes, sessions, participants, and responses
+- Row Level Security (RLS) policies for data protection
+- Real-time subscriptions for live quiz sessions

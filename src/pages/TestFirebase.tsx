@@ -2,9 +2,7 @@ import React, { useState, useEffect } from 'react';
 import styled from 'styled-components';
 import { theme } from '../styles/theme';
 import { Button, Card, Input } from '../components/ui';
-import { auth, db } from '../services/firebase';
-import { createUserWithEmailAndPassword, signInWithEmailAndPassword } from 'firebase/auth';
-import { doc, setDoc, getDoc } from 'firebase/firestore';
+import { supabase } from '../services/supabase';
 
 const TestContainer = styled.div`
   max-width: 600px;
@@ -33,9 +31,9 @@ const StatusIndicator = styled.div<{ $status: 'success' | 'error' | 'pending' }>
   }}
 `;
 
-export const TestFirebase: React.FC = () => {
-  const [firebaseStatus, setFirebaseStatus] = useState<'pending' | 'success' | 'error'>('pending');
-  const [firestoreStatus, setFirestoreStatus] = useState<'pending' | 'success' | 'error'>('pending');
+export const TestSupabase: React.FC = () => {
+  const [supabaseStatus, setSupabaseStatus] = useState<'pending' | 'success' | 'error'>('pending');
+  const [databaseStatus, setDatabaseStatus] = useState<'pending' | 'success' | 'error'>('pending');
   const [authStatus, setAuthStatus] = useState<'pending' | 'success' | 'error'>('pending');
   const [testEmail, setTestEmail] = useState('test@example.com');
   const [testPassword, setTestPassword] = useState('test123456');
@@ -46,40 +44,47 @@ export const TestFirebase: React.FC = () => {
   };
 
   useEffect(() => {
-    testFirebaseConnection();
+    testSupabaseConnection();
   }, []);
 
-  const testFirebaseConnection = async () => {
-    // Test Firebase initialization
+  const testSupabaseConnection = async () => {
+    // Test Supabase initialization
     try {
-      if (auth && db) {
-        setFirebaseStatus('success');
-        addLog('✅ Firebase initialized successfully');
+      if (supabase) {
+        setSupabaseStatus('success');
+        addLog('✅ Supabase initialized successfully');
       } else {
-        setFirebaseStatus('error');
-        addLog('❌ Firebase initialization failed');
+        setSupabaseStatus('error');
+        addLog('❌ Supabase initialization failed');
       }
     } catch (error) {
-      setFirebaseStatus('error');
-      addLog(`❌ Firebase error: ${error}`);
+      setSupabaseStatus('error');
+      addLog(`❌ Supabase error: ${error}`);
     }
 
-    // Test Firestore connection
+    // Test Database connection
     try {
-      const testDoc = doc(db, 'test', 'connection');
-      await setDoc(testDoc, { timestamp: new Date(), test: true });
-      const docSnap = await getDoc(testDoc);
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .limit(1);
       
-      if (docSnap.exists()) {
-        setFirestoreStatus('success');
-        addLog('✅ Firestore connection successful');
+      if (error) {
+        // If table doesn't exist, that's expected
+        if (error.message.includes('relation "profiles" does not exist')) {
+          setDatabaseStatus('success');
+          addLog('✅ Database connection successful (profiles table needs to be created)');
+        } else {
+          setDatabaseStatus('error');
+          addLog(`❌ Database error: ${error.message}`);
+        }
       } else {
-        setFirestoreStatus('error');
-        addLog('❌ Firestore write/read failed');
+        setDatabaseStatus('success');
+        addLog('✅ Database connection successful');
       }
     } catch (error: any) {
-      setFirestoreStatus('error');
-      addLog(`❌ Firestore error: ${error.message}`);
+      setDatabaseStatus('error');
+      addLog(`❌ Database error: ${error.message}`);
     }
   };
 
@@ -88,40 +93,49 @@ export const TestFirebase: React.FC = () => {
       setAuthStatus('pending');
       addLog('🔄 Testing authentication...');
 
-      // Try to create a test user
-      const userCredential = await createUserWithEmailAndPassword(auth, testEmail, testPassword);
-      addLog(`✅ User created: ${userCredential.user.email}`);
-      
-      // Sign out
-      await auth.signOut();
-      addLog('✅ User signed out');
-      
-      // Try to sign in
-      const signInResult = await signInWithEmailAndPassword(auth, testEmail, testPassword);
-      addLog(`✅ User signed in: ${signInResult.user.email}`);
-      
+      // First try to sign in (in case user already exists)
+      const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
+        email: testEmail,
+        password: testPassword,
+      });
+
+      if (signInError && signInError.message.includes('Invalid login credentials')) {
+        addLog('ℹ️ User not found, creating new user...');
+        
+        // Try to create a test user
+        const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
+          email: testEmail,
+          password: testPassword,
+        });
+
+        if (signUpError) throw signUpError;
+        addLog(`✅ User created: ${signUpData.user?.email}`);
+        
+        // Try to sign in again
+        const { data: newSignIn, error: newSignInError } = await supabase.auth.signInWithPassword({
+          email: testEmail,
+          password: testPassword,
+        });
+        
+        if (newSignInError) throw newSignInError;
+        addLog(`✅ User signed in: ${newSignIn.user?.email}`);
+      } else if (signInError) {
+        throw signInError;
+      } else {
+        addLog(`✅ User signed in: ${signInData.user?.email}`);
+      }
+
       setAuthStatus('success');
     } catch (error: any) {
       setAuthStatus('error');
       addLog(`❌ Auth error: ${error.message}`);
-      
-      // If user already exists, try to sign in
-      if (error.code === 'auth/email-already-in-use') {
-        try {
-          const signInResult = await signInWithEmailAndPassword(auth, testEmail, testPassword);
-          addLog(`✅ Existing user signed in: ${signInResult.user.email}`);
-          setAuthStatus('success');
-        } catch (signInError: any) {
-          addLog(`❌ Sign in failed: ${signInError.message}`);
-        }
-      }
     }
   };
 
   return (
     <TestContainer>
       <h1 style={{ color: theme.colors.textPrimary, marginBottom: theme.spacing.lg }}>
-        Firebase Connection Test
+        Supabase Connection Test
       </h1>
       
       <TestSection padding="lg">
@@ -129,14 +143,14 @@ export const TestFirebase: React.FC = () => {
           Connection Status
         </h3>
         
-        <StatusIndicator $status={firebaseStatus}>
-          Firebase App: {firebaseStatus === 'success' ? '✅ Connected' : 
-                        firebaseStatus === 'error' ? '❌ Failed' : '⏳ Testing...'}
+        <StatusIndicator $status={supabaseStatus}>
+          Supabase Client: {supabaseStatus === 'success' ? '✅ Connected' : 
+                            supabaseStatus === 'error' ? '❌ Failed' : '⏳ Testing...'}
         </StatusIndicator>
         
-        <StatusIndicator $status={firestoreStatus}>
-          Firestore Database: {firestoreStatus === 'success' ? '✅ Connected' : 
-                               firestoreStatus === 'error' ? '❌ Failed' : '⏳ Testing...'}
+        <StatusIndicator $status={databaseStatus}>
+          PostgreSQL Database: {databaseStatus === 'success' ? '✅ Connected' : 
+                                databaseStatus === 'error' ? '❌ Failed' : '⏳ Testing...'}
         </StatusIndicator>
         
         <StatusIndicator $status={authStatus}>
@@ -171,11 +185,14 @@ export const TestFirebase: React.FC = () => {
         
         <Button
           variant="primary"
-          onClick={testAuth}
+          onClick={() => {
+            console.log('Button clicked!');
+            testAuth();
+          }}
           disabled={authStatus === 'pending'}
           fullWidth
         >
-          Test Auth
+          {authStatus === 'pending' ? 'Testing...' : 'Test Auth'}
         </Button>
       </TestSection>
       

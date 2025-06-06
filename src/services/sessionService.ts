@@ -1,41 +1,35 @@
-import {
-  collection,
-  doc,
-  addDoc,
-  updateDoc,
-  deleteDoc,
-  getDoc,
-  getDocs,
-  query,
-  where,
-  orderBy,
-  onSnapshot,
-  serverTimestamp,
-  Timestamp,
-  writeBatch
-} from 'firebase/firestore';
-import { db } from './firebase';
+import { supabase } from './supabase';
 import { QuizSession, Participant, QuestionResponse } from '../types';
 
-export interface FirebaseSession extends Omit<QuizSession, 'startTime' | 'endTime'> {
-  startTime?: Timestamp;
-  endTime?: Timestamp;
-  createdAt: Timestamp;
-  updatedAt: Timestamp;
+export interface DatabaseSession extends Omit<QuizSession, 'startTime' | 'endTime' | 'participants'> {
+  start_time?: string;
+  end_time?: string;
+  created_at: string;
+  updated_at: string;
+  created_by: string;
+  quiz_id: string;
+  current_question_index: number;
 }
 
-export interface FirebaseParticipant extends Omit<Participant, 'joinedAt'> {
-  joinedAt: Timestamp;
+export interface DatabaseParticipant extends Omit<Participant, 'joinedAt' | 'sessionId'> {
+  joined_at: string;
+  session_id: string;
+  current_question_index: number;
 }
 
-export interface FirebaseResponse extends Omit<QuestionResponse, 'submittedAt'> {
-  submittedAt: Timestamp;
+export interface DatabaseResponse extends Omit<QuestionResponse, 'submittedAt' | 'participantId' | 'questionId'> {
+  submitted_at: string;
+  participant_id: string;
+  question_id: string;
+  session_id: string;
+  time_spent: number;
+  is_correct: boolean;
 }
 
 class SessionService {
-  private readonly sessionsCollection = 'sessions';
-  private readonly participantsCollection = 'participants';
-  private readonly responsesCollection = 'responses';
+  private readonly sessionsTable = 'sessions';
+  private readonly participantsTable = 'participants';
+  private readonly responsesTable = 'responses';
 
   // Generate a 6-digit session code
   private generateSessionCode(): string {
@@ -44,13 +38,14 @@ class SessionService {
 
   // Check if session code is unique
   private async isCodeUnique(code: string): Promise<boolean> {
-    const q = query(
-      collection(db, this.sessionsCollection),
-      where('code', '==', code),
-      where('status', 'in', ['waiting', 'active', 'paused'])
-    );
-    const snapshot = await getDocs(q);
-    return snapshot.empty;
+    const { data, error } = await supabase
+      .from(this.sessionsTable)
+      .select('id')
+      .eq('code', code)
+      .in('status', ['waiting', 'active', 'paused']);
+
+    if (error) throw error;
+    return data.length === 0;
   }
 
   // Generate unique session code
@@ -66,27 +61,43 @@ class SessionService {
     return code;
   }
 
-  // Convert Firebase timestamps to Date objects
-  private convertFirebaseSession(data: any): QuizSession {
+  // Convert database objects to application format
+  private convertDatabaseSession(data: any): QuizSession {
     return {
-      ...data,
-      startTime: data.startTime?.toDate(),
-      endTime: data.endTime?.toDate(),
-      participants: data.participants || [],
+      id: data.id,
+      quizId: data.quiz_id,
+      code: data.code,
+      status: data.status,
+      currentQuestionIndex: data.current_question_index,
+      startTime: data.start_time ? new Date(data.start_time) : undefined,
+      endTime: data.end_time ? new Date(data.end_time) : undefined,
+      participants: [],
+      createdBy: data.created_by,
     };
   }
 
-  private convertFirebaseParticipant(data: any): Participant {
+  private convertDatabaseParticipant(data: any): Participant {
     return {
-      ...data,
-      joinedAt: data.joinedAt?.toDate() || new Date(),
+      id: data.id,
+      name: data.name,
+      sessionId: data.session_id,
+      joinedAt: new Date(data.joined_at),
+      status: data.status,
+      currentQuestionIndex: data.current_question_index,
+      score: data.score,
     };
   }
 
-  private convertFirebaseResponse(data: any): QuestionResponse {
+  private convertDatabaseResponse(data: any): QuestionResponse {
     return {
-      ...data,
-      submittedAt: data.submittedAt?.toDate() || new Date(),
+      id: data.id,
+      participantId: data.participant_id,
+      questionId: data.question_id,
+      answer: data.answer,
+      isCorrect: data.is_correct,
+      points: data.points,
+      timeSpent: data.time_spent,
+      submittedAt: new Date(data.submitted_at),
     };
   }
 
@@ -94,20 +105,26 @@ class SessionService {
   async createSession(quizId: string, createdBy: string): Promise<string> {
     try {
       const code = await this.generateUniqueCode();
+      const now = new Date().toISOString();
       
       const sessionData = {
-        quizId,
+        quiz_id: quizId,
         code,
         status: 'waiting' as const,
-        currentQuestionIndex: 0,
-        createdBy,
-        participants: [],
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
+        current_question_index: 0,
+        created_by: createdBy,
+        created_at: now,
+        updated_at: now,
       };
 
-      const docRef = await addDoc(collection(db, this.sessionsCollection), sessionData);
-      return docRef.id;
+      const { data, error } = await supabase
+        .from(this.sessionsTable)
+        .insert([sessionData])
+        .select('id')
+        .single();
+
+      if (error) throw error;
+      return data.id;
     } catch (error) {
       console.error('Error creating session:', error);
       throw new Error('Failed to create session');
@@ -117,21 +134,21 @@ class SessionService {
   // Update session status and properties
   async updateSession(sessionId: string, updates: Partial<QuizSession>): Promise<void> {
     try {
-      const sessionRef = doc(db, this.sessionsCollection, sessionId);
       const updateData: any = {
-        ...updates,
-        updatedAt: serverTimestamp(),
+        updated_at: new Date().toISOString(),
       };
 
-      // Convert Date objects to Timestamps for Firebase
-      if (updates.startTime) {
-        updateData.startTime = updates.startTime;
-      }
-      if (updates.endTime) {
-        updateData.endTime = updates.endTime;
-      }
+      if (updates.status) updateData.status = updates.status;
+      if (updates.currentQuestionIndex !== undefined) updateData.current_question_index = updates.currentQuestionIndex;
+      if (updates.startTime) updateData.start_time = updates.startTime.toISOString();
+      if (updates.endTime) updateData.end_time = updates.endTime.toISOString();
 
-      await updateDoc(sessionRef, updateData);
+      const { error } = await supabase
+        .from(this.sessionsTable)
+        .update(updateData)
+        .eq('id', sessionId);
+
+      if (error) throw error;
     } catch (error) {
       console.error('Error updating session:', error);
       throw new Error('Failed to update session');
@@ -141,14 +158,18 @@ class SessionService {
   // Get session by ID
   async getSession(sessionId: string): Promise<QuizSession | null> {
     try {
-      const sessionRef = doc(db, this.sessionsCollection, sessionId);
-      const sessionSnap = await getDoc(sessionRef);
-      
-      if (sessionSnap.exists()) {
-        return this.convertFirebaseSession({ id: sessionSnap.id, ...sessionSnap.data() });
+      const { data, error } = await supabase
+        .from(this.sessionsTable)
+        .select('*')
+        .eq('id', sessionId)
+        .single();
+
+      if (error) {
+        if (error.code === 'PGRST116') return null; // Row not found
+        throw error;
       }
-      
-      return null;
+
+      return this.convertDatabaseSession(data);
     } catch (error) {
       console.error('Error getting session:', error);
       throw new Error('Failed to get session');
@@ -158,19 +179,27 @@ class SessionService {
   // Get session by code
   async getSessionByCode(code: string): Promise<QuizSession | null> {
     try {
-      const q = query(
-        collection(db, this.sessionsCollection),
-        where('code', '==', code.toUpperCase())
-      );
+      console.log('Searching for session with code:', code.toUpperCase());
       
-      const snapshot = await getDocs(q);
-      
-      if (!snapshot.empty) {
-        const doc = snapshot.docs[0];
-        return this.convertFirebaseSession({ id: doc.id, ...doc.data() });
+      const { data, error } = await supabase
+        .from(this.sessionsTable)
+        .select('*')
+        .eq('code', code.toUpperCase())
+        .single();
+
+      console.log('Session search result:', { data, error });
+
+      if (error) {
+        if (error.code === 'PGRST116') {
+          console.log('Session not found');
+          return null; // Row not found
+        }
+        throw error;
       }
-      
-      return null;
+
+      const session = this.convertDatabaseSession(data);
+      console.log('Converted session:', session);
+      return session;
     } catch (error) {
       console.error('Error getting session by code:', error);
       throw new Error('Failed to find session');
@@ -180,16 +209,15 @@ class SessionService {
   // Get all sessions for a teacher
   async getTeacherSessions(teacherId: string): Promise<QuizSession[]> {
     try {
-      const q = query(
-        collection(db, this.sessionsCollection),
-        where('createdBy', '==', teacherId),
-        orderBy('updatedAt', 'desc')
-      );
-      
-      const snapshot = await getDocs(q);
-      return snapshot.docs.map(doc => 
-        this.convertFirebaseSession({ id: doc.id, ...doc.data() })
-      );
+      const { data, error } = await supabase
+        .from(this.sessionsTable)
+        .select('*')
+        .eq('created_by', teacherId)
+        .order('updated_at', { ascending: false });
+
+      if (error) throw error;
+
+      return data.map(session => this.convertDatabaseSession(session));
     } catch (error) {
       console.error('Error getting teacher sessions:', error);
       throw new Error('Failed to get sessions');
@@ -199,18 +227,33 @@ class SessionService {
   // Add participant to session
   async addParticipant(sessionId: string, participant: Omit<Participant, 'id' | 'joinedAt'>): Promise<string> {
     try {
+      console.log('Adding participant:', { sessionId, participant });
+      
       const participantData = {
-        ...participant,
-        sessionId,
-        joinedAt: serverTimestamp(),
+        name: participant.name,
+        session_id: sessionId,
+        status: participant.status,
+        current_question_index: participant.currentQuestionIndex,
+        score: participant.score,
+        joined_at: new Date().toISOString(),
       };
 
-      const docRef = await addDoc(collection(db, this.participantsCollection), participantData);
+      console.log('Participant data to insert:', participantData);
+
+      const { data, error } = await supabase
+        .from(this.participantsTable)
+        .insert([participantData])
+        .select('id')
+        .single();
+
+      console.log('Add participant result:', { data, error });
+
+      if (error) throw error;
       
       // Update session with participant count (optional optimization)
       await this.updateSessionParticipantCount(sessionId);
       
-      return docRef.id;
+      return data.id;
     } catch (error) {
       console.error('Error adding participant:', error);
       throw new Error('Failed to join session');
@@ -220,8 +263,18 @@ class SessionService {
   // Update participant status
   async updateParticipant(participantId: string, updates: Partial<Participant>): Promise<void> {
     try {
-      const participantRef = doc(db, this.participantsCollection, participantId);
-      await updateDoc(participantRef, updates);
+      const updateData: any = {};
+      
+      if (updates.status) updateData.status = updates.status;
+      if (updates.currentQuestionIndex !== undefined) updateData.current_question_index = updates.currentQuestionIndex;
+      if (updates.score !== undefined) updateData.score = updates.score;
+
+      const { error } = await supabase
+        .from(this.participantsTable)
+        .update(updateData)
+        .eq('id', participantId);
+
+      if (error) throw error;
     } catch (error) {
       console.error('Error updating participant:', error);
       throw new Error('Failed to update participant');
@@ -231,16 +284,15 @@ class SessionService {
   // Get participants for a session
   async getSessionParticipants(sessionId: string): Promise<Participant[]> {
     try {
-      const q = query(
-        collection(db, this.participantsCollection),
-        where('sessionId', '==', sessionId),
-        orderBy('joinedAt', 'asc')
-      );
-      
-      const snapshot = await getDocs(q);
-      return snapshot.docs.map(doc => 
-        this.convertFirebaseParticipant({ id: doc.id, ...doc.data() })
-      );
+      const { data, error } = await supabase
+        .from(this.participantsTable)
+        .select('*')
+        .eq('session_id', sessionId)
+        .order('joined_at', { ascending: true });
+
+      if (error) throw error;
+
+      return data.map(participant => this.convertDatabaseParticipant(participant));
     } catch (error) {
       console.error('Error getting participants:', error);
       throw new Error('Failed to get participants');
@@ -251,12 +303,34 @@ class SessionService {
   async submitResponse(response: Omit<QuestionResponse, 'id' | 'submittedAt'>): Promise<string> {
     try {
       const responseData = {
-        ...response,
-        submittedAt: serverTimestamp(),
+        participant_id: response.participantId,
+        question_id: response.questionId,
+        answer: response.answer,
+        is_correct: response.isCorrect,
+        points: response.points,
+        time_spent: response.timeSpent,
+        session_id: '', // Will need to get this from participant
+        submitted_at: new Date().toISOString(),
       };
 
-      const docRef = await addDoc(collection(db, this.responsesCollection), responseData);
-      return docRef.id;
+      // Get session_id from participant
+      const { data: participantData, error: participantError } = await supabase
+        .from(this.participantsTable)
+        .select('session_id')
+        .eq('id', response.participantId)
+        .single();
+
+      if (participantError) throw participantError;
+      responseData.session_id = participantData.session_id;
+
+      const { data, error } = await supabase
+        .from(this.responsesTable)
+        .insert([responseData])
+        .select('id')
+        .single();
+
+      if (error) throw error;
+      return data.id;
     } catch (error) {
       console.error('Error submitting response:', error);
       throw new Error('Failed to submit response');
@@ -266,17 +340,16 @@ class SessionService {
   // Get responses for a session and question
   async getQuestionResponses(sessionId: string, questionId: string): Promise<QuestionResponse[]> {
     try {
-      const q = query(
-        collection(db, this.responsesCollection),
-        where('sessionId', '==', sessionId),
-        where('questionId', '==', questionId),
-        orderBy('submittedAt', 'asc')
-      );
-      
-      const snapshot = await getDocs(q);
-      return snapshot.docs.map(doc => 
-        this.convertFirebaseResponse({ id: doc.id, ...doc.data() })
-      );
+      const { data, error } = await supabase
+        .from(this.responsesTable)
+        .select('*')
+        .eq('session_id', sessionId)
+        .eq('question_id', questionId)
+        .order('submitted_at', { ascending: true });
+
+      if (error) throw error;
+
+      return data.map(response => this.convertDatabaseResponse(response));
     } catch (error) {
       console.error('Error getting responses:', error);
       throw new Error('Failed to get responses');
@@ -286,16 +359,15 @@ class SessionService {
   // Get all responses for a session
   async getSessionResponses(sessionId: string): Promise<QuestionResponse[]> {
     try {
-      const q = query(
-        collection(db, this.responsesCollection),
-        where('sessionId', '==', sessionId),
-        orderBy('submittedAt', 'asc')
-      );
-      
-      const snapshot = await getDocs(q);
-      return snapshot.docs.map(doc => 
-        this.convertFirebaseResponse({ id: doc.id, ...doc.data() })
-      );
+      const { data, error } = await supabase
+        .from(this.responsesTable)
+        .select('*')
+        .eq('session_id', sessionId)
+        .order('submitted_at', { ascending: true });
+
+      if (error) throw error;
+
+      return data.map(response => this.convertDatabaseResponse(response));
     } catch (error) {
       console.error('Error getting session responses:', error);
       throw new Error('Failed to get responses');
@@ -304,38 +376,54 @@ class SessionService {
 
   // Subscribe to session updates
   subscribeToSession(sessionId: string, callback: (session: QuizSession | null) => void): () => void {
-    const sessionRef = doc(db, this.sessionsCollection, sessionId);
-    
-    return onSnapshot(sessionRef, (doc) => {
-      if (doc.exists()) {
-        const session = this.convertFirebaseSession({ id: doc.id, ...doc.data() });
-        callback(session);
-      } else {
-        callback(null);
-      }
-    }, (error) => {
-      console.error('Error in session subscription:', error);
-      callback(null);
-    });
+    const channel = supabase
+      .channel(`session-${sessionId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: this.sessionsTable,
+          filter: `id=eq.${sessionId}`
+        },
+        () => {
+          this.getSession(sessionId).then(callback).catch(() => callback(null));
+        }
+      )
+      .subscribe();
+
+    // Initial fetch
+    this.getSession(sessionId).then(callback).catch(() => callback(null));
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }
 
   // Subscribe to participants updates
   subscribeToParticipants(sessionId: string, callback: (participants: Participant[]) => void): () => void {
-    const q = query(
-      collection(db, this.participantsCollection),
-      where('sessionId', '==', sessionId),
-      orderBy('joinedAt', 'asc')
-    );
+    const channel = supabase
+      .channel(`participants-${sessionId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: this.participantsTable,
+          filter: `session_id=eq.${sessionId}`
+        },
+        () => {
+          this.getSessionParticipants(sessionId).then(callback).catch(() => callback([]));
+        }
+      )
+      .subscribe();
 
-    return onSnapshot(q, (snapshot) => {
-      const participants = snapshot.docs.map(doc => 
-        this.convertFirebaseParticipant({ id: doc.id, ...doc.data() })
-      );
-      callback(participants);
-    }, (error) => {
-      console.error('Error in participants subscription:', error);
-      callback([]);
-    });
+    // Initial fetch
+    this.getSessionParticipants(sessionId).then(callback).catch(() => callback([]));
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }
 
   // Subscribe to question responses
@@ -344,49 +432,49 @@ class SessionService {
     questionId: string, 
     callback: (responses: QuestionResponse[]) => void
   ): () => void {
-    const q = query(
-      collection(db, this.responsesCollection),
-      where('sessionId', '==', sessionId),
-      where('questionId', '==', questionId),
-      orderBy('submittedAt', 'asc')
-    );
+    const channel = supabase
+      .channel(`responses-${sessionId}-${questionId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: this.responsesTable,
+          filter: `session_id=eq.${sessionId},question_id=eq.${questionId}`
+        },
+        () => {
+          this.getQuestionResponses(sessionId, questionId).then(callback).catch(() => callback([]));
+        }
+      )
+      .subscribe();
 
-    return onSnapshot(q, (snapshot) => {
-      const responses = snapshot.docs.map(doc => 
-        this.convertFirebaseResponse({ id: doc.id, ...doc.data() })
-      );
-      callback(responses);
-    }, (error) => {
-      console.error('Error in responses subscription:', error);
-      callback([]);
-    });
+    // Initial fetch
+    this.getQuestionResponses(sessionId, questionId).then(callback).catch(() => callback([]));
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }
 
   // End session and cleanup
   async endSession(sessionId: string): Promise<void> {
     try {
-      const batch = writeBatch(db);
-      
       // Update session status
-      const sessionRef = doc(db, this.sessionsCollection, sessionId);
-      batch.update(sessionRef, {
-        status: 'completed',
-        endTime: new Date(),
-        updatedAt: serverTimestamp(),
-      });
+      await supabase
+        .from(this.sessionsTable)
+        .update({
+          status: 'completed',
+          end_time: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', sessionId);
 
       // Update all participants to disconnected
-      const participantsQuery = query(
-        collection(db, this.participantsCollection),
-        where('sessionId', '==', sessionId)
-      );
-      
-      const participantsSnapshot = await getDocs(participantsQuery);
-      participantsSnapshot.docs.forEach(doc => {
-        batch.update(doc.ref, { status: 'disconnected' });
-      });
+      await supabase
+        .from(this.participantsTable)
+        .update({ status: 'disconnected' })
+        .eq('session_id', sessionId);
 
-      await batch.commit();
     } catch (error) {
       console.error('Error ending session:', error);
       throw new Error('Failed to end session');
@@ -396,33 +484,24 @@ class SessionService {
   // Delete session and all related data
   async deleteSession(sessionId: string): Promise<void> {
     try {
-      const batch = writeBatch(db);
-      
-      // Delete session
-      const sessionRef = doc(db, this.sessionsCollection, sessionId);
-      batch.delete(sessionRef);
+      // Delete responses first (foreign key dependency)
+      await supabase
+        .from(this.responsesTable)
+        .delete()
+        .eq('session_id', sessionId);
 
       // Delete participants
-      const participantsQuery = query(
-        collection(db, this.participantsCollection),
-        where('sessionId', '==', sessionId)
-      );
-      const participantsSnapshot = await getDocs(participantsQuery);
-      participantsSnapshot.docs.forEach(doc => {
-        batch.delete(doc.ref);
-      });
+      await supabase
+        .from(this.participantsTable)
+        .delete()
+        .eq('session_id', sessionId);
 
-      // Delete responses
-      const responsesQuery = query(
-        collection(db, this.responsesCollection),
-        where('sessionId', '==', sessionId)
-      );
-      const responsesSnapshot = await getDocs(responsesQuery);
-      responsesSnapshot.docs.forEach(doc => {
-        batch.delete(doc.ref);
-      });
+      // Delete session
+      await supabase
+        .from(this.sessionsTable)
+        .delete()
+        .eq('id', sessionId);
 
-      await batch.commit();
     } catch (error) {
       console.error('Error deleting session:', error);
       throw new Error('Failed to delete session');
@@ -433,11 +512,13 @@ class SessionService {
   private async updateSessionParticipantCount(sessionId: string): Promise<void> {
     try {
       const participants = await this.getSessionParticipants(sessionId);
-      const sessionRef = doc(db, this.sessionsCollection, sessionId);
-      await updateDoc(sessionRef, {
-        participantCount: participants.length,
-        updatedAt: serverTimestamp(),
-      });
+      await supabase
+        .from(this.sessionsTable)
+        .update({
+          participant_count: participants.length,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', sessionId);
     } catch (error) {
       console.error('Error updating participant count:', error);
     }

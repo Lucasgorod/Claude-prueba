@@ -442,8 +442,16 @@ export const LiveDashboard: React.FC = () => {
     );
   }
 
+  // Debug logging
+  console.log('Access check:', {
+    isTeacher,
+    sessionCreatedBy: session.createdBy,
+    userId: user?.id,
+    hasAccess: isTeacher && session.createdBy === user?.id
+  });
+
   // Show access denied if not teacher or not session owner
-  if (!isTeacher || session.createdBy !== user?.uid) {
+  if (!isTeacher || session.createdBy !== user?.id) {
     return (
       <DashboardContainer
         variants={staggerContainer}

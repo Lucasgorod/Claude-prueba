@@ -163,15 +163,22 @@ export const JoinSession: React.FC = () => {
     setError('');
 
     try {
+      console.log('Starting join process:', { sessionCode: sessionCode.trim().toUpperCase(), studentName: studentName.trim() });
+      
       // Sign in student anonymously
+      console.log('Signing in student anonymously...');
       await signInStudent(studentName.trim());
+      console.log('Student signed in successfully');
       
       // Join the session
+      console.log('Joining session...');
       const { sessionId } = await joinSession(sessionCode.trim().toUpperCase(), studentName.trim());
+      console.log('Joined session successfully:', sessionId);
       
       // Navigate to quiz taking page
       navigate(`/student/quiz/${sessionId}`);
     } catch (err: any) {
+      console.error('Join session error:', err);
       setError(err.message || 'Failed to join session. Please check the code and try again.');
     } finally {
       setIsLoading(false);

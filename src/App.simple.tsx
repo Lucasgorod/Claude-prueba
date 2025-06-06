@@ -9,13 +9,13 @@ function App() {
       color: '#fff',
       minHeight: '100vh'
     }}>
-      <h1>Firebase Test App</h1>
+      <h1>Supabase Quiz App</h1>
       <p>Si puedes ver esto, React está funcionando.</p>
       
       <div style={{ marginTop: '20px' }}>
         <h2>Enlaces de prueba:</h2>
         <ul>
-          <li><a href="/test" style={{ color: '#007AFF' }}>Prueba Firebase (/test)</a></li>
+          <li><a href="/test" style={{ color: '#007AFF' }}>Prueba Supabase (/test)</a></li>
           <li><a href="/login" style={{ color: '#007AFF' }}>Login (/login)</a></li>
           <li><a href="/admin" style={{ color: '#007AFF' }}>Admin (/admin)</a></li>
           <li><a href="/student" style={{ color: '#007AFF' }}>Student (/student)</a></li>

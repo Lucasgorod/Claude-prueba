@@ -55,7 +55,7 @@ export const useSession = (sessionId?: string) => {
 
     try {
       setSessionState(prev => ({ ...prev, loading: true, error: null }));
-      const newSessionId = await sessionService.createSession(quizId, user.uid);
+      const newSessionId = await sessionService.createSession(quizId, user.id);
       return newSessionId;
     } catch (error: any) {
       setSessionState(prev => ({
@@ -205,7 +205,6 @@ export const useSession = (sessionId?: string) => {
   ) => {
     try {
       await sessionService.submitResponse({
-        sessionId,
         participantId,
         questionId,
         answer,
@@ -250,7 +249,7 @@ export const useSession = (sessionId?: string) => {
     if (!user) return [];
 
     try {
-      return await sessionService.getTeacherSessions(user.uid);
+      return await sessionService.getTeacherSessions(user.id);
     } catch (error: any) {
       setSessionState(prev => ({
         ...prev,
