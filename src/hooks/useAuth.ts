@@ -22,6 +22,7 @@ export const useAuth = () => {
       if (user) {
         try {
           const profile = await authService.getUserProfile(user.id);
+          console.log('🔍 User profile loaded:', profile);
           setAuthState({
             user,
             profile,
@@ -29,7 +30,7 @@ export const useAuth = () => {
             error: null,
           });
         } catch (error) {
-          console.error('Error loading user profile:', error);
+          console.error('❌ Error loading user profile:', error);
           setAuthState({
             user,
             profile: null,

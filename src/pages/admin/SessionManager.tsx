@@ -175,10 +175,13 @@ export const SessionManager: React.FC = () => {
   const loadSessions = async () => {
     try {
       setLoading(true);
+      console.log('🔍 Loading sessions for user:', user?.id);
+      console.log('🔍 User is teacher:', isTeacher);
       const teacherSessions = await getTeacherSessions();
+      console.log('🔍 Received sessions:', teacherSessions);
       setSessions(teacherSessions);
     } catch (error) {
-      console.error('Error loading sessions:', error);
+      console.error('❌ Error loading sessions:', error);
     } finally {
       setLoading(false);
     }

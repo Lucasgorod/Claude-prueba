@@ -209,17 +209,26 @@ class SessionService {
   // Get all sessions for a teacher
   async getTeacherSessions(teacherId: string): Promise<QuizSession[]> {
     try {
+      console.log('🔍 getTeacherSessions called with teacherId:', teacherId);
+      
       const { data, error } = await supabase
         .from(this.sessionsTable)
         .select('*')
         .eq('created_by', teacherId)
         .order('updated_at', { ascending: false });
 
-      if (error) throw error;
+      console.log('🔍 Supabase query result:', { data, error });
 
-      return data.map(session => this.convertDatabaseSession(session));
+      if (error) {
+        console.error('❌ Supabase error:', error);
+        throw error;
+      }
+
+      const sessions = data.map(session => this.convertDatabaseSession(session));
+      console.log('🔍 Converted sessions:', sessions);
+      return sessions;
     } catch (error) {
-      console.error('Error getting teacher sessions:', error);
+      console.error('❌ Error getting teacher sessions:', error);
       throw new Error('Failed to get sessions');
     }
   }
