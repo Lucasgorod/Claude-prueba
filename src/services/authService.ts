@@ -1,5 +1,6 @@
 import { supabase } from './supabase';
 import type { User, AuthError } from '@supabase/supabase-js';
+import { logger } from './logger';
 
 export interface UserProfile {
   id: string;
@@ -14,7 +15,7 @@ class AuthService {
   // Sign in teacher with email/password
   async signInTeacher(email: string, password: string): Promise<User> {
     try {
-      console.log('AuthService: Starting sign in process for:', email);
+      logger.debug('AuthService: Starting sign in process for:', email);
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
@@ -23,13 +24,13 @@ class AuthService {
       if (error) throw error;
       if (!data.user) throw new Error('No user returned from sign in');
 
-      console.log('AuthService: Sign in successful, updating last login...');
+      logger.debug('AuthService: Sign in successful, updating last login...');
       await this.updateLastLogin(data.user.id);
-      console.log('AuthService: Last login updated, returning user');
+      logger.debug('AuthService: Last login updated, returning user');
       
       return data.user;
     } catch (error: any) {
-      console.error('Error signing in teacher:', error);
+      logger.error('Error signing in teacher:', error);
       throw new Error(this.getAuthErrorMessage(error.message));
     }
   }
@@ -64,7 +65,7 @@ class AuthService {
 
       return data.user;
     } catch (error: any) {
-      console.error('Error registering teacher:', error);
+      logger.error('Error registering teacher:', error);
       throw new Error(this.getAuthErrorMessage(error.message));
     }
   }
@@ -76,7 +77,7 @@ class AuthService {
       const tempEmail = `${studentName.toLowerCase().replace(/\s+/g, '')}_${Date.now()}@temp.student`;
       const tempPassword = 'student123';
 
-      console.log('Creating temporary student account:', tempEmail);
+      logger.debug('Creating temporary student account:', tempEmail);
 
       const { data, error } = await supabase.auth.signUp({
         email: tempEmail,
@@ -99,7 +100,7 @@ class AuthService {
 
       return data.user;
     } catch (error: any) {
-      console.error('Error signing in student:', error);
+      logger.error('Error signing in student:', error);
       throw new Error('Failed to join session. Please try again.');
     }
   }
@@ -110,7 +111,7 @@ class AuthService {
       const { error } = await supabase.auth.signOut();
       if (error) throw error;
     } catch (error) {
-      console.error('Error signing out:', error);
+      logger.error('Error signing out:', error);
       throw new Error('Failed to sign out');
     }
   }
@@ -146,7 +147,7 @@ class AuthService {
 
       return data;
     } catch (error) {
-      console.error('Error getting user profile:', error);
+      logger.error('Error getting user profile:', error);
       return null;
     }
   }
@@ -160,7 +161,7 @@ class AuthService {
 
       if (error) throw error;
     } catch (error) {
-      console.error('Error creating user profile:', error);
+      logger.error('Error creating user profile:', error);
     }
   }
 
@@ -174,7 +175,7 @@ class AuthService {
 
       if (error) throw error;
     } catch (error: any) {
-      console.error('Error updating last login:', error);
+      logger.error('Error updating last login:', error);
     }
   }
 

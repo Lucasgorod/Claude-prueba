@@ -1,5 +1,6 @@
 import { supabase } from './supabase';
 import { Quiz, Question } from '../types';
+import { logger } from './logger';
 
 export interface DatabaseQuiz extends Omit<Quiz, 'createdAt' | 'updatedAt'> {
   created_at: string;
@@ -23,7 +24,7 @@ class QuizService {
   // Create a new quiz
   async createQuiz(quiz: Omit<Quiz, 'id' | 'createdAt' | 'updatedAt'>): Promise<string> {
     try {
-      console.log('Creating quiz with data:', quiz);
+      logger.debug('Creating quiz with data:', quiz);
       
       const now = new Date().toISOString();
       const quizData = {
@@ -35,7 +36,7 @@ class QuizService {
         updated_at: now,
       };
 
-      console.log('Formatted quiz data:', quizData);
+      logger.debug('Formatted quiz data:', quizData);
 
       const { data, error } = await supabase
         .from(this.table)
@@ -43,16 +44,16 @@ class QuizService {
         .select('id')
         .single();
 
-      console.log('Supabase response:', { data, error });
+      logger.debug('Supabase response:', { data, error });
 
       if (error) {
-        console.error('Supabase error details:', error);
+        logger.error('Supabase error details:', error);
         throw error;
       }
       
       return data.id;
     } catch (error) {
-      console.error('Error creating quiz:', error);
+      logger.error('Error creating quiz:', error);
       if (error instanceof Error) {
         throw new Error(`Failed to create quiz: ${error.message}`);
       }
@@ -79,7 +80,7 @@ class QuizService {
 
       if (error) throw error;
     } catch (error) {
-      console.error('Error updating quiz:', error);
+      logger.error('Error updating quiz:', error);
       throw new Error('Failed to update quiz');
     }
   }
@@ -94,7 +95,7 @@ class QuizService {
 
       if (error) throw error;
     } catch (error) {
-      console.error('Error deleting quiz:', error);
+      logger.error('Error deleting quiz:', error);
       throw new Error('Failed to delete quiz');
     }
   }
@@ -115,7 +116,7 @@ class QuizService {
 
       return this.convertDatabaseQuiz(data);
     } catch (error) {
-      console.error('Error getting quiz:', error);
+      logger.error('Error getting quiz:', error);
       throw new Error('Failed to get quiz');
     }
   }
@@ -133,7 +134,7 @@ class QuizService {
 
       return data.map(quiz => this.convertDatabaseQuiz(quiz));
     } catch (error) {
-      console.error('Error getting user quizzes:', error);
+      logger.error('Error getting user quizzes:', error);
       throw new Error('Failed to get quizzes');
     }
   }
@@ -150,7 +151,7 @@ class QuizService {
 
       return data.map(quiz => this.convertDatabaseQuiz(quiz));
     } catch (error) {
-      console.error('Error getting all quizzes:', error);
+      logger.error('Error getting all quizzes:', error);
       throw new Error('Failed to get quizzes');
     }
   }
@@ -169,13 +170,13 @@ class QuizService {
         },
         () => {
           // Fetch updated data when changes occur
-          this.getUserQuizzes(userId).then(callback).catch(console.error);
+          this.getUserQuizzes(userId).then(callback).catch(err => logger.error(err));
         }
       )
       .subscribe();
 
     // Initial fetch
-    this.getUserQuizzes(userId).then(callback).catch(console.error);
+    this.getUserQuizzes(userId).then(callback).catch(err => logger.error(err));
 
     return () => {
       supabase.removeChannel(channel);
@@ -195,13 +196,13 @@ class QuizService {
         },
         () => {
           // Fetch updated data when changes occur
-          this.getAllQuizzes().then(callback).catch(console.error);
+          this.getAllQuizzes().then(callback).catch(err => logger.error(err));
         }
       )
       .subscribe();
 
     // Initial fetch
-    this.getAllQuizzes().then(callback).catch(console.error);
+    this.getAllQuizzes().then(callback).catch(err => logger.error(err));
 
     return () => {
       supabase.removeChannel(channel);
@@ -229,7 +230,7 @@ class QuizService {
 
       return await this.createQuiz(duplicatedQuiz);
     } catch (error) {
-      console.error('Error duplicating quiz:', error);
+      logger.error('Error duplicating quiz:', error);
       throw new Error('Failed to duplicate quiz');
     }
   }
@@ -309,7 +310,7 @@ class QuizService {
         questionTypes,
       };
     } catch (error) {
-      console.error('Error getting quiz stats:', error);
+      logger.error('Error getting quiz stats:', error);
       throw new Error('Failed to get quiz statistics');
     }
   }

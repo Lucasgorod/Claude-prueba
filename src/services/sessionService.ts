@@ -1,5 +1,6 @@
 import { supabase } from './supabase';
 import { QuizSession, Participant, QuestionResponse } from '../types';
+import { logger } from './logger';
 
 export interface DatabaseSession extends Omit<QuizSession, 'startTime' | 'endTime' | 'participants'> {
   start_time?: string;
@@ -126,7 +127,7 @@ class SessionService {
       if (error) throw error;
       return data.id;
     } catch (error) {
-      console.error('Error creating session:', error);
+      logger.error('Error creating session:', error);
       throw new Error('Failed to create session');
     }
   }
@@ -150,7 +151,7 @@ class SessionService {
 
       if (error) throw error;
     } catch (error) {
-      console.error('Error updating session:', error);
+      logger.error('Error updating session:', error);
       throw new Error('Failed to update session');
     }
   }
@@ -171,7 +172,7 @@ class SessionService {
 
       return this.convertDatabaseSession(data);
     } catch (error) {
-      console.error('Error getting session:', error);
+      logger.error('Error getting session:', error);
       throw new Error('Failed to get session');
     }
   }
@@ -179,7 +180,7 @@ class SessionService {
   // Get session by code
   async getSessionByCode(code: string): Promise<QuizSession | null> {
     try {
-      console.log('Searching for session with code:', code.toUpperCase());
+      logger.debug('Searching for session with code:', code.toUpperCase());
       
       const { data, error } = await supabase
         .from(this.sessionsTable)
@@ -187,21 +188,21 @@ class SessionService {
         .eq('code', code.toUpperCase())
         .single();
 
-      console.log('Session search result:', { data, error });
+      logger.debug('Session search result:', { data, error });
 
       if (error) {
         if (error.code === 'PGRST116') {
-          console.log('Session not found');
+          logger.debug('Session not found');
           return null; // Row not found
         }
         throw error;
       }
 
       const session = this.convertDatabaseSession(data);
-      console.log('Converted session:', session);
+      logger.debug('Converted session:', session);
       return session;
     } catch (error) {
-      console.error('Error getting session by code:', error);
+      logger.error('Error getting session by code:', error);
       throw new Error('Failed to find session');
     }
   }
@@ -219,7 +220,7 @@ class SessionService {
 
       return data.map(session => this.convertDatabaseSession(session));
     } catch (error) {
-      console.error('Error getting teacher sessions:', error);
+      logger.error('Error getting teacher sessions:', error);
       throw new Error('Failed to get sessions');
     }
   }
@@ -227,7 +228,7 @@ class SessionService {
   // Add participant to session
   async addParticipant(sessionId: string, participant: Omit<Participant, 'id' | 'joinedAt'>): Promise<string> {
     try {
-      console.log('Adding participant:', { sessionId, participant });
+      logger.debug('Adding participant:', { sessionId, participant });
       
       const participantData = {
         name: participant.name,
@@ -238,7 +239,7 @@ class SessionService {
         joined_at: new Date().toISOString(),
       };
 
-      console.log('Participant data to insert:', participantData);
+      logger.debug('Participant data to insert:', participantData);
 
       const { data, error } = await supabase
         .from(this.participantsTable)
@@ -246,7 +247,7 @@ class SessionService {
         .select('id')
         .single();
 
-      console.log('Add participant result:', { data, error });
+      logger.debug('Add participant result:', { data, error });
 
       if (error) throw error;
       
@@ -255,7 +256,7 @@ class SessionService {
       
       return data.id;
     } catch (error) {
-      console.error('Error adding participant:', error);
+      logger.error('Error adding participant:', error);
       throw new Error('Failed to join session');
     }
   }
@@ -276,7 +277,7 @@ class SessionService {
 
       if (error) throw error;
     } catch (error) {
-      console.error('Error updating participant:', error);
+      logger.error('Error updating participant:', error);
       throw new Error('Failed to update participant');
     }
   }
@@ -294,7 +295,7 @@ class SessionService {
 
       return data.map(participant => this.convertDatabaseParticipant(participant));
     } catch (error) {
-      console.error('Error getting participants:', error);
+      logger.error('Error getting participants:', error);
       throw new Error('Failed to get participants');
     }
   }
@@ -332,7 +333,7 @@ class SessionService {
       if (error) throw error;
       return data.id;
     } catch (error) {
-      console.error('Error submitting response:', error);
+      logger.error('Error submitting response:', error);
       throw new Error('Failed to submit response');
     }
   }
@@ -351,7 +352,7 @@ class SessionService {
 
       return data.map(response => this.convertDatabaseResponse(response));
     } catch (error) {
-      console.error('Error getting responses:', error);
+      logger.error('Error getting responses:', error);
       throw new Error('Failed to get responses');
     }
   }
@@ -369,7 +370,7 @@ class SessionService {
 
       return data.map(response => this.convertDatabaseResponse(response));
     } catch (error) {
-      console.error('Error getting session responses:', error);
+      logger.error('Error getting session responses:', error);
       throw new Error('Failed to get responses');
     }
   }
@@ -476,7 +477,7 @@ class SessionService {
         .eq('session_id', sessionId);
 
     } catch (error) {
-      console.error('Error ending session:', error);
+      logger.error('Error ending session:', error);
       throw new Error('Failed to end session');
     }
   }
@@ -503,7 +504,7 @@ class SessionService {
         .eq('id', sessionId);
 
     } catch (error) {
-      console.error('Error deleting session:', error);
+      logger.error('Error deleting session:', error);
       throw new Error('Failed to delete session');
     }
   }
@@ -520,7 +521,7 @@ class SessionService {
         })
         .eq('id', sessionId);
     } catch (error) {
-      console.error('Error updating participant count:', error);
+      logger.error('Error updating participant count:', error);
     }
   }
 
@@ -553,7 +554,7 @@ class SessionService {
         averageResponseTime: Math.round(averageResponseTime),
       };
     } catch (error) {
-      console.error('Error getting session stats:', error);
+      logger.error('Error getting session stats:', error);
       throw new Error('Failed to get session statistics');
     }
   }
