@@ -65,3 +65,49 @@ export interface MatchColumn {
   right: string[];
   correctMatches: { [key: string]: string };
 }
+
+// Raw database row types returned by Supabase
+export interface DatabaseQuiz {
+  id: string;
+  title: string;
+  description: string;
+  questions: Question[];
+  created_at: string;
+  updated_at: string;
+  created_by: string;
+}
+
+export interface DatabaseSession {
+  id: string;
+  quiz_id: string;
+  code: string;
+  status: 'waiting' | 'active' | 'paused' | 'completed';
+  current_question_index: number;
+  start_time?: string;
+  end_time?: string;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DatabaseParticipant {
+  id: string;
+  name: string;
+  session_id: string;
+  joined_at: string;
+  status: 'connected' | 'disconnected';
+  current_question_index: number;
+  score: number;
+}
+
+export interface DatabaseResponse {
+  id: string;
+  participant_id: string;
+  question_id: string;
+  session_id: string;
+  answer: string | string[];
+  is_correct: boolean;
+  points: number;
+  time_spent: number;
+  submitted_at: string;
+}

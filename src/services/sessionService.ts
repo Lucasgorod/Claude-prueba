@@ -1,30 +1,12 @@
 import { supabase } from './supabase';
-import { QuizSession, Participant, QuestionResponse } from '../types';
-
-export interface DatabaseSession extends Omit<QuizSession, 'startTime' | 'endTime' | 'participants'> {
-  start_time?: string;
-  end_time?: string;
-  created_at: string;
-  updated_at: string;
-  created_by: string;
-  quiz_id: string;
-  current_question_index: number;
-}
-
-export interface DatabaseParticipant extends Omit<Participant, 'joinedAt' | 'sessionId'> {
-  joined_at: string;
-  session_id: string;
-  current_question_index: number;
-}
-
-export interface DatabaseResponse extends Omit<QuestionResponse, 'submittedAt' | 'participantId' | 'questionId'> {
-  submitted_at: string;
-  participant_id: string;
-  question_id: string;
-  session_id: string;
-  time_spent: number;
-  is_correct: boolean;
-}
+import {
+  QuizSession,
+  Participant,
+  QuestionResponse,
+  DatabaseSession,
+  DatabaseParticipant,
+  DatabaseResponse,
+} from '../types';
 
 class SessionService {
   private readonly sessionsTable = 'sessions';
@@ -62,7 +44,7 @@ class SessionService {
   }
 
   // Convert database objects to application format
-  private convertDatabaseSession(data: any): QuizSession {
+  private convertDatabaseSession(data: DatabaseSession): QuizSession {
     return {
       id: data.id,
       quizId: data.quiz_id,
@@ -76,7 +58,7 @@ class SessionService {
     };
   }
 
-  private convertDatabaseParticipant(data: any): Participant {
+  private convertDatabaseParticipant(data: DatabaseParticipant): Participant {
     return {
       id: data.id,
       name: data.name,
@@ -88,7 +70,7 @@ class SessionService {
     };
   }
 
-  private convertDatabaseResponse(data: any): QuestionResponse {
+  private convertDatabaseResponse(data: DatabaseResponse): QuestionResponse {
     return {
       id: data.id,
       participantId: data.participant_id,
@@ -134,7 +116,7 @@ class SessionService {
   // Update session status and properties
   async updateSession(sessionId: string, updates: Partial<QuizSession>): Promise<void> {
     try {
-      const updateData: any = {
+      const updateData: Partial<DatabaseSession> = {
         updated_at: new Date().toISOString(),
       };
 
@@ -263,7 +245,7 @@ class SessionService {
   // Update participant status
   async updateParticipant(participantId: string, updates: Partial<Participant>): Promise<void> {
     try {
-      const updateData: any = {};
+      const updateData: Partial<DatabaseParticipant> = {};
       
       if (updates.status) updateData.status = updates.status;
       if (updates.currentQuestionIndex !== undefined) updateData.current_question_index = updates.currentQuestionIndex;

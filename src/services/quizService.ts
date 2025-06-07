@@ -1,17 +1,11 @@
 import { supabase } from './supabase';
-import { Quiz, Question } from '../types';
-
-export interface DatabaseQuiz extends Omit<Quiz, 'createdAt' | 'updatedAt'> {
-  created_at: string;
-  updated_at: string;
-  created_by: string;
-}
+import { Quiz, DatabaseQuiz } from '../types';
 
 class QuizService {
   private readonly table = 'quizzes';
 
   // Convert database quiz to application format
-  private convertDatabaseQuiz(dbQuiz: any): Quiz {
+  private convertDatabaseQuiz(dbQuiz: DatabaseQuiz): Quiz {
     return {
       ...dbQuiz,
       createdAt: new Date(dbQuiz.created_at),
@@ -63,7 +57,7 @@ class QuizService {
   // Update an existing quiz
   async updateQuiz(quizId: string, updates: Partial<Omit<Quiz, 'id' | 'createdAt' | 'updatedAt'>>): Promise<void> {
     try {
-      const updateData: any = {
+      const updateData: Partial<DatabaseQuiz> = {
         updated_at: new Date().toISOString(),
       };
 
